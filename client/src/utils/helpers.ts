@@ -7,7 +7,7 @@ import { t } from 'i18next';
 import { addMessage } from '../store/messages';
 
 // ✅ BASE URL của backend (nếu cần, có thể chuyển vào .env và import từ đó)
-const BASE_URL = 'http://localhost:5000';
+const BASE_URL = 'http://localhost:8000';
 
 // Gửi tin nhắn người dùng hoặc bot vào MongoDB
 export const sendMessageToMongo = async (
@@ -80,6 +80,60 @@ export const getBotResponseV2 = async ({ message }: { message?: string }) => {
     const fallback = t('genericError') || 'Bot gặp lỗi, vui lòng thử lại sau.';
 
     // 6. Thông báo lỗi UI
+    store.dispatch(endBotResponse({
+      botMessageId,
+      botResponse: fallback,
+      botDatabaseId: null,
+      userMessageId: null,
+    }));
+
+    return fallback;
+  }
+};
+
+export const getBotResponseRAG = async ({ message }: { message?: string }) => {
+  const state = store.getState();
+  const chatId = selectChatId(state);
+  const botMessageId = String(ObjectID());
+
+  try {
+    store.dispatch(startBotResponse());
+
+    const response = await fetch(`${BASE_URL}/api/chat/query`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ question: message }),
+    });
+
+    if (!response.ok) throw new Error('❌ Không nhận được phản hồi từ Chatbot');
+
+    const data = await response.json();
+    const botResponse = data.answer;
+
+    // ✅ 1. Cập nhật giao diện với phản hồi bot
+    store.dispatch(streamBotResponse({
+      botMessageId,
+      partialResponse: botResponse,
+    }));
+
+    store.dispatch(endBotResponse({
+      botMessageId,
+      botResponse,
+      botDatabaseId: null,
+      userMessageId: null,
+    }));
+
+    // // ✅ 2. Lưu vào MongoDB
+    // await sendMessageToMongo('BOT', botResponse, 'text');
+
+    return botResponse;
+
+  } catch (error) {
+    console.error('❌ Lỗi khi gọi Chatbot:', error);
+    const fallback = t('genericError') || 'Bot gặp lỗi, vui lòng thử lại sau.';
+
     store.dispatch(endBotResponse({
       botMessageId,
       botResponse: fallback,

@@ -5,7 +5,7 @@ import styled from 'styled-components'
 import AppContext from '../context/AppContext'
 import { RootState } from 'types/state'
 import { addMessage, selectChatRole, toggleBotTyping, toggleUserTyping } from 'store/messages'
-import { createUserMessage, getBotResponseV2, sendMessageToMongo } from 'utils/helpers'
+import { createUserMessage, getBotResponseRAG, sendMessageToMongo } from 'utils/helpers'
 import { useTranslation } from 'react-i18next'
 import clsx from 'clsx'
 import { BotMode } from 'hooks/useGetBotMode'
@@ -33,24 +33,65 @@ export const WidgetKeypad = ({ botMode }: WidgetKeypadProps) => {
   const userTyping = useSelector((state: RootState) => state.messageState.userTyping)
   const { btnColor } = theme
 
-
   const handleSubmit = async () => {
-    if (userInput?.length > 0) {
-      const message = userInput.trim();
-      dispatch(addMessage(createUserMessage(message)));
-  
-      // Gửi 1 lần duy nhất vào MongoDB ở đây
+    if (userInput?.trim().length === 0) return;
+
+    const message = userInput.trim();
+
+    // 1. Gửi tin nhắn người dùng
+    dispatch(addMessage(createUserMessage(message)));
+    try {
       await sendMessageToMongo('USER', message, 'text');
-  
-      setUserInput('');
-      dispatch(toggleUserTyping(false));
-      dispatch(toggleBotTyping(true));
-      
-      await getBotResponseV2({ message });
+    } catch (error) {
+      console.error('❌ Lỗi khi lưu user message vào Mongo:', error);
+    }
+
+    setUserInput('');
+    dispatch(toggleUserTyping(false));
+    dispatch(toggleBotTyping(true));
+
+    try {
+      // 2. Gọi backend RAG để lấy câu trả lời
+      const ragAnswer = await getBotResponseRAG({message});
+
+      if (ragAnswer) {
+        dispatch(
+          addMessage({
+            text: ragAnswer,
+            sender: 'BOT',
+            messageType: 'text',
+            ts: new Date().toISOString(),
+          })
+        );
+        try {
+          await sendMessageToMongo('BOT', ragAnswer, 'text');
+        } catch (error) {
+          console.error('❌ Lỗi khi lưu bot message vào Mongo:', error);
+        }
+      } else {
+        dispatch(
+          addMessage({
+            text: t('genericError') || 'Bot không phản hồi, vui lòng thử lại.',
+            sender: 'BOT',
+            messageType: 'text',
+            ts: new Date().toISOString(),
+          })
+        );
+      }
+    } catch (error) {
+      console.error('❌ Lỗi RAG:', error);
+      dispatch(
+        addMessage({
+          text: t('genericError') || 'Bot gặp lỗi, vui lòng thử lại sau.',
+          sender: 'BOT',
+          messageType: 'text',
+          ts: new Date().toISOString(),
+        })
+      );
+    } finally {
+      dispatch(toggleBotTyping(false));
     }
   };
-  
-  
 
   return (
     <div
