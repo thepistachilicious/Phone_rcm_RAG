@@ -12,6 +12,8 @@ import os
 from dotenv import load_dotenv
 from llama_index.llms.gemini import Gemini
 from rag.custom_llm import OurLLM
+from weaviate.classes.init import AdditionalConfig, Timeout, Auth
+
 
 
 load_dotenv()
@@ -25,6 +27,7 @@ Settings.llm = OurLLM()
 client = weaviate.connect_to_weaviate_cloud(
     cluster_url=weaviate_url,
     auth_credentials=AuthApiKey(weaviate_api_key),
+    additional_config=AdditionalConfig(timeout=Timeout(init=10)),
 )
 
 embed_model = HuggingFaceEmbedding(model_name="hiieu/halong_embedding")
@@ -53,5 +56,5 @@ def build_retriever(index_name: str):
     return retriever
 
 def get_all_retrievers():
-    index_names = ["Phone_info", "Laptop_info", "QA"]
+    index_names = ["Phone_info", "Laptop_info"]
     return [(name, build_retriever(name)) for name in index_names]

@@ -9,7 +9,7 @@ MONGO_URI = os.getenv("MONGO_URI")
 client = AsyncIOMotorClient(MONGO_URI)
 
 db = client["chat"]  # tên database
-message_collection = db["messages1"]  # tên collection
+message_collection = db["messages2"]  # tên collection
 
 async def check_mongo_connection():
     """

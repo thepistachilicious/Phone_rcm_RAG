@@ -34,7 +34,8 @@ def generate_gemini_response(query: str, context: str, history_context: str) -> 
 
     3. Câu hỏi hiện tại: {query}
 
-    Kết hợp 3 mục trên và không tạo thông tin mới, trả lời người dùng một cách tự nhiên, chính xác.
+    Kết hợp 3 mục trên và không tạo thông tin mới, tạo câu trả lời cho người dùng một cách tự nhiên, chính xác.
+    Có thể rút gọn câu trả lời để đúng trọng tâm và phù hợp với câu hỏi nhất.
     """
 
     print("🤖 Gửi prompt tới Gemini thông qua LLM wrapper...")
@@ -54,15 +55,24 @@ async def get_llama_response(query: str) -> dict:
         history_context = ""
         
     analysis = analyze_query_with_gemini(query, history_context)
+    
+    if analysis.get("is_greeting") and analysis.get("answered"):
+        return {
+            "answer": analysis["answered"] or "Chào bạn! Tôi có thể giúp gì về điện thoại hoặc laptop?",
+            "is_retrieved": False
+        }
 
-    if analysis["is_duplicate"] and analysis["answered"]:
+    if analysis.get("is_duplicate") and analysis.get("answered"):
         return {
             "answer": analysis["answered"],
             "is_retrieved": False
         }
 
-    if analysis["is_ambiguous"] and analysis["clarified_query"]:
-        query = analysis["clarified_query"]
+    if analysis.get("is_ambiguous")  and analysis.get("new_query"):
+        query = analysis["new_query"]
+
+    target_name = analysis.get("retrieval_target", "").strip()
+
 
 
     retriever_tuples = get_all_retrievers()
@@ -70,7 +80,17 @@ async def get_llama_response(query: str) -> dict:
     best_retriever_name = None
     best_score = -1
 
+    prioritized = []
+    fallback = []
     for retriever_name, retriever in retriever_tuples:
+        if target_name and target_name.lower() in retriever_name.lower():
+            prioritized.append((retriever_name, retriever))
+        else:
+            fallback.append((retriever_name, retriever))
+
+    all_retrievers = prioritized + fallback
+
+    for retriever_name, retriever in prioritized:
         print(f"🔎 Đang truy vấn trong: {retriever_name}")
 
         query_engine = RetrieverQueryEngine.from_args(
@@ -105,7 +125,8 @@ async def get_llama_response(query: str) -> dict:
         }
 
     context = "\n".join([node.node.get_content() for node in best_response.source_nodes])
-
+    print(f"Sử dụng retriver trên tài liệu {best_retriever_name}")
+    
     try:
         answer = generate_gemini_response(query, context, history_context)
     except Exception as e:
