@@ -43,7 +43,7 @@ db = client["chat"]            # Tên database MongoDB
 message_collection = db["messages1"]  # Tên collection lưu trữ tin nhắn
 ```
 
-- Bước 4: Khởi chạy backend
+- Bước 4: Khởi chạy chatbot-backend
 ```bash
 uvicorn app.main:app --reload --port 8000
 ```
